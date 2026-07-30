@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Трекер привычек</title>
+<style>
+  :root{
+    --bg: #000000;
+    --card: #1c1c1c;
+    --text: #f2f2f0;
+    --muted: #6e6e6e;
+    --faint: #454545;
+    --today-bg: #e8543a;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; background: var(--bg);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text);
+  }
+  .page{ max-width: 420px; margin: 0 auto; padding: 28px 20px; }
+  .title{
+    font-size: 34px; font-weight: 600; margin: 0 0 18px;
+    letter-spacing: -0.01em;
+  }
+  .title .year{ color: var(--faint); }
+  .card{
+    background: var(--card);
+    border-radius: 18px;
+    padding: 14px 14px 6px;
+    position: relative;
+  }
+  table{ width:100%; border-collapse: collapse; }
+  thead th{
+    font-size: 11px; font-weight: 500; color: var(--muted);
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 4px 2px 12px; text-align:center; white-space:nowrap;
+  }
+  thead th:first-child{ text-align:left; width: 30%; }
+  .habit-name{
+    background:none; border:none; color: var(--muted); font: inherit;
+    text-transform:uppercase; letter-spacing:.08em; width:100%;
+    text-align:center; cursor:text;
+  }
+  .habit-name:focus{ outline:none; color: var(--text); }
+  .del-habit{
+    display:block; text-align:center; color: var(--faint); font-size:10px;
+    cursor:pointer; margin-top:2px; text-transform:none; letter-spacing:0;
+  }
+  .del-habit:hover{ color: var(--today-bg); }
+  tbody td{ padding: 5px 2px; text-align:center; vertical-align:middle; }
+  .day-cell{
+    text-align:left; padding-left:2px; white-space:nowrap;
+    color: var(--text); font-size: 15px; font-variant-numeric: tabular-nums;
+  }
+  .day-cell .wd{
+    color: var(--muted); font-size: 13px; margin-left: 6px; font-weight:400;
+  }
+  tr.weekend .day-cell, tr.weekend .day-cell .wd{ color: var(--faint); }
+  tr.today .day-cell .num{
+    background: var(--today-bg); color: #fff;
+    border-radius: 7px; padding: 1px 7px; font-weight:600;
+  }
+  .mark{
+    width: 34px; height:22px; margin: 0 auto;
+    display:flex; align-items:center; justify-content:center;
+    border-radius: 6px; cursor: text; font-size: 13px; color: var(--faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .mark:hover{ background: rgba(255,255,255,0.05); }
+  .mark.on{ color: var(--text); font-weight: 500; }
+  .mark input{
+    width: 100%; background:none; border:none; color: var(--text);
+    font: inherit; text-align:center; outline:none;
+  }
+  .add-col{ width: 30px; }
+  .add-btn{
+    background:none; border:1px dashed var(--faint); color: var(--muted);
+    width:20px; height:20px; border-radius:6px; cursor:pointer; font-size:13px;
+    line-height:1; margin: 0 auto; display:block;
+  }
+  .add-btn:hover{ color: var(--text); border-color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1 class="title"><span id="monthName"></span> <span class="year" id="yearName"></span></h1>
+  <div class="card">
+    <table>
+      <thead><tr id="headRow"></tr></thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'habit-tracker-state-v2';
+const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const weekdayShort = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return { year: 2026, month: 7, habits: ['Журнал','Чтение'], marks: {} };
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+let state = loadState();
+function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+
+function render(){
+  document.getElementById('monthName').textContent = monthNames[state.month];
+  document.getElementById('yearName').textContent = state.year;
+
+  const headRow = document.getElementById('headRow');
+  headRow.innerHTML = '<th></th>' + state.habits.map((h,i) => `
+    <th>
+      <input class="habit-name" data-i="${i}" value="${h}">
+      <span class="del-habit" data-del="${i}">убрать</span>
+    </th>`).join('') + `<th class="add-col"><button class="add-btn" id="addHabit">+</button></th>`;
+
+  const body = document.getElementById('body');
+  const total = daysInMonth(state.year, state.month);
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === state.year && today.getMonth() === state.month;
+  let rows = '';
+  for(let d=1; d<=total; d++){
+    const date = new Date(state.year, state.month, d);
+    const dow = date.getDay();
+    const wd = weekdayShort[dow];
+    const key = `${state.year}-${state.month}-${d}`;
+    const isToday = isCurrentMonth && today.getDate() === d;
+    const isWeekend = dow === 0 || dow === 6;
+    rows += `<tr class="${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''}">
+      <td class="day-cell"><span class="num">${d}</span><span class="wd">${wd}</span></td>
+      ${state.habits.map((h,i) => {
+        const val = state.marks[key] && state.marks[key][i];
+        return `<td><div class="mark ${val ? 'on' : ''}" data-key="${key}" data-i="${i}">${val ? val : '·'}</div></td>`;
+      }).join('')}
+      <td></td>
+    </tr>`;
+  }
+  body.innerHTML = rows;
+
+  body.querySelectorAll('.mark').forEach(el => {
+    el.addEventListener('click', () => {
+      if(el.querySelector('input')) return;
+      const key = el.dataset.key, i = el.dataset.i;
+      const current = (state.marks[key] && state.marks[key][i]) || '';
+      el.innerHTML = `<input type="text" inputmode="decimal" value="${current}">`;
+      const input = el.querySelector('input');
+      input.focus();
+      input.select();
+
+      const commit = () => {
+        const v = input.value.trim();
+        if(!state.marks[key]) state.marks[key] = {};
+        if(v) state.marks[key][i] = v; else delete state.marks[key][i];
+        saveState();
+        el.classList.toggle('on', !!v);
+        el.textContent = v || '·';
+      };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', e => {
+        if(e.key === ' '){
+          e.preventDefault();
+          input.value = '×';
+          input.blur();
+        }
+        if(e.key === 'Enter') input.blur();
+        if(e.key === 'Escape'){ input.value = current; input.blur(); }
+      });
+    });
+  });
+
+  headRow.querySelectorAll('.habit-name').forEach(inp => {
+    inp.addEventListener('change', () => {
+      state.habits[+inp.dataset.i] = inp.value.trim() || 'Привычка';
+      saveState();
+    });
+  });
+
+  headRow.querySelectorAll('.del-habit').forEach(el => {
+    el.addEventListener('click', () => {
+      const i = +el.dataset.del;
+      state.habits.splice(i,1);
+      Object.keys(state.marks).forEach(k => {
+        const m = state.marks[k];
+        if(m){
+          const nm = {};
+          Object.keys(m).forEach(idx => {
+            const ni = +idx;
+            if(ni < i) nm[ni] = m[idx];
+            else if(ni > i) nm[ni-1] = m[idx];
+          });
+          state.marks[k] = nm;
+        }
+      });
+      saveState();
+      render();
+    });
+  });
+
+  document.getElementById('addHabit').addEventListener('click', () => {
+    state.habits.push('Новая');
+    saveState();
+    render();
+  });
+}
+
+render();
+</script>
+</body>
+</html>
