@@ -31,6 +31,7 @@
   .title{
     font-size: 34px; font-weight: 600; margin: 0;
     letter-spacing: -0.01em; line-height: 1.15;
+    padding-left: 28px;
   }
   .title .year{ display:block; color: var(--faint); }
   .icon-btn{
@@ -322,8 +323,12 @@ function render(){
   });
   body.innerHTML = rows;
 
-  const todayRow = body.querySelector('tr.today');
-  if(todayRow) todayRow.scrollIntoView({ block: 'center' });
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const todayRow = body.querySelector('tr.today');
+      if(todayRow) todayRow.scrollIntoView({ block: 'end' });
+    });
+  });
 
   body.querySelectorAll('.mark').forEach(el => {
     el.addEventListener('click', () => {
