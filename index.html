@@ -216,6 +216,11 @@ async function ghLoad(){
     }
   });
   if(res.status === 404) return null;
+  if(res.status === 401 || res.status === 403){
+    const err = new Error(`GitHub GET ${res.status}`);
+    err.authError = true;
+    throw err;
+  }
   if(!res.ok) throw new Error(`GitHub GET ${res.status}`);
   const data = await res.json();
   currentSha = data.sha;
@@ -240,7 +245,9 @@ async function ghSave(newState){
   if(!res.ok){
     let msg = res.status;
     try{ const err = await res.json(); if(err.message) msg += ' ' + err.message; }catch(e){}
-    throw new Error(`GitHub PUT ${msg}`);
+    const e = new Error(`GitHub PUT ${msg}`);
+    if(res.status === 401 || res.status === 403) e.authError = true;
+    throw e;
   }
   const data = await res.json();
   currentSha = data.content.sha;
@@ -261,7 +268,15 @@ function scheduleSave(){
       setStatus('Сохранено');
       setTimeout(() => setStatus(''), 1500);
     }catch(e){
-      setStatus('Ошибка сохранения: ' + e.message, true);
+      if(e.authError){
+        config = null;
+        saveConfig(null);
+        document.getElementById('app').style.display = 'none';
+        document.getElementById('setup').style.display = 'block';
+        document.getElementById('cfgErr').textContent = 'Токен не работает (истёк или отозван) - вставь новый.';
+      } else {
+        setStatus('Ошибка сохранения: ' + e.message, true);
+      }
     }
   }, 600);
 }
@@ -460,7 +475,15 @@ async function init(){
     setStatus('');
     render();
   }catch(e){
-    setStatus('Не удалось загрузить: ' + e.message, true);
+    if(e.authError){
+      config = null;
+      saveConfig(null);
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('setup').style.display = 'block';
+      document.getElementById('cfgErr').textContent = 'Токен не работает (истёк или отозван) - вставь новый.';
+    } else {
+      setStatus('Не удалось загрузить: ' + e.message, true);
+    }
   }
 }
 
