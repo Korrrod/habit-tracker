@@ -35,7 +35,7 @@
   .title .year{ display:block; color: var(--faint); }
   .icon-btn{
     background:none; border:none; color: var(--faint); cursor:pointer;
-    font-size: 16px; padding: 6px;
+    padding: 6px; display:flex; align-items:center; justify-content:center;
   }
   .icon-btn:hover{ color: var(--muted); }
   .status{
@@ -138,7 +138,13 @@
 <div class="page" id="app" style="display:none">
   <div class="title-row">
     <h1 class="title"><span id="monthName"></span> <span class="year" id="yearName"></span></h1>
-    <button class="icon-btn" id="downloadBtn" title="Скачать JSON">⬇</button>
+    <button class="icon-btn" id="downloadBtn" title="Скачать JSON">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"></path>
+        <path d="M7 10l5 5 5-5"></path>
+        <path d="M5 21h14"></path>
+      </svg>
+    </button>
   </div>
   <div class="status" id="status"></div>
   <div class="card">
@@ -178,7 +184,7 @@ const CALENDAR_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="non
 const weekdayShort = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 
 // Отсчёт начинается с этой даты и продолжается по сегодняшний день включительно.
-const START_DATE = new Date(2026, 6, 20); // 20 июля 2026
+const START_DATE = new Date(2026, 5, 20); // 20 июня 2026
 
 function loadConfig(){
   try{ return JSON.parse(localStorage.getItem(CONFIG_KEY)); }catch(e){ return null; }
