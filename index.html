@@ -97,23 +97,44 @@
 <script>
 const STORAGE_KEY = 'habit-tracker-state-v2';
 const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+const monthGenitive = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 const weekdayShort = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+
+// Отсчёт начинается с этой даты и продолжается по сегодняшний день включительно.
+const START_DATE = new Date(2026, 6, 20); // 20 июля 2026
 
 function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw) return JSON.parse(raw);
   }catch(e){}
-  return { year: 2026, month: 7, habits: ['Журнал','Чтение'], marks: {} };
+  return { habits: ['Журнал','Чтение'], marks: {} };
 }
 function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
 let state = loadState();
-function daysInMonth(y,m){ return new Date(y,m+1,0).getDate(); }
+
+function dateKey(date){ return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; }
+
+function dateRange(){
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const start = new Date(START_DATE);
+  start.setHours(0,0,0,0);
+  const days = [];
+  const cursor = new Date(start);
+  while(cursor <= today){
+    days.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
 
 function render(){
-  document.getElementById('monthName').textContent = monthNames[state.month];
-  document.getElementById('yearName').textContent = state.year;
+  const days = dateRange();
+  const today = days[days.length - 1];
+  document.getElementById('monthName').textContent = monthNames[today.getMonth()];
+  document.getElementById('yearName').textContent = today.getFullYear();
 
   const headRow = document.getElementById('headRow');
   headRow.innerHTML = '<th></th>' + state.habits.map((h,i) => `
@@ -123,27 +144,30 @@ function render(){
     </th>`).join('') + `<th class="add-col"><button class="add-btn" id="addHabit">+</button></th>`;
 
   const body = document.getElementById('body');
-  const total = daysInMonth(state.year, state.month);
-  const today = new Date();
-  const isCurrentMonth = today.getFullYear() === state.year && today.getMonth() === state.month;
   let rows = '';
-  for(let d=1; d<=total; d++){
-    const date = new Date(state.year, state.month, d);
+  let prevMonth = null;
+  days.forEach(date => {
     const dow = date.getDay();
     const wd = weekdayShort[dow];
-    const key = `${state.year}-${state.month}-${d}`;
-    const isToday = isCurrentMonth && today.getDate() === d;
+    const key = dateKey(date);
+    const isToday = date.getTime() === today.getTime();
     const isWeekend = dow === 0 || dow === 6;
+    const d = date.getDate();
+    const label = date.getMonth() !== prevMonth ? `${d} ${monthGenitive[date.getMonth()]}` : `${d}`;
+    prevMonth = date.getMonth();
     rows += `<tr class="${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''}">
-      <td class="day-cell"><span class="num">${d}</span><span class="wd">${wd}</span></td>
+      <td class="day-cell"><span class="num">${label}</span><span class="wd">${wd}</span></td>
       ${state.habits.map((h,i) => {
         const val = state.marks[key] && state.marks[key][i];
         return `<td><div class="mark ${val ? 'on' : ''}" data-key="${key}" data-i="${i}">${val ? val : '·'}</div></td>`;
       }).join('')}
       <td></td>
     </tr>`;
-  }
+  });
   body.innerHTML = rows;
+
+  const todayRow = body.querySelector('tr.today');
+  if(todayRow) todayRow.scrollIntoView({ block: 'center' });
 
   body.querySelectorAll('.mark').forEach(el => {
     el.addEventListener('click', () => {
