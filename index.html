@@ -49,6 +49,9 @@
     padding: 14px 0 6px;
     position: relative;
     overflow: hidden;
+    max-height: 65vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .table-wrap{
     overflow-x: auto;
@@ -60,10 +63,11 @@
     font-size: 11px; font-weight: 500; color: var(--muted);
     letter-spacing: .08em; text-transform: uppercase;
     padding: 10px 8px 18px; text-align:center; white-space:nowrap;
+    position: sticky; top: 0; background: var(--card); z-index: 2;
   }
   thead th:first-child{
     text-align:left; width: 90px; min-width: 90px;
-    position: sticky; left: 0; background: var(--card); z-index: 2;
+    position: sticky; left: 0; top: 0; background: var(--card); z-index: 3;
   }
   thead th.habit-th{ white-space: normal; min-width: 58px; }
   .habit-name{
@@ -308,7 +312,7 @@ function render(){
     const d = date.getDate();
 
     if(date.getMonth() !== prevMonth){
-      rows += `<tr class="month-divider"><td colspan="${colspan}">${CALENDAR_ICON} ${monthNames[date.getMonth()]}</td></tr>`;
+      rows += `<tr class="month-divider" data-month="${date.getMonth()}" data-year="${date.getFullYear()}"><td colspan="${colspan}">${CALENDAR_ICON} ${monthNames[date.getMonth()]}</td></tr>`;
     }
     prevMonth = date.getMonth();
 
@@ -323,10 +327,34 @@ function render(){
   });
   body.innerHTML = rows;
 
+  const card = document.querySelector('.card');
+  const dividers = Array.from(body.querySelectorAll('tr.month-divider'));
+
+  function updateVisibleMonth(){
+    if(!dividers.length) return;
+    const headerH = headRow.getBoundingClientRect().height;
+    const cardTop = card.getBoundingClientRect().top;
+    let current = dividers[0];
+    for(const div of dividers){
+      const rect = div.getBoundingClientRect();
+      if(rect.top - cardTop <= headerH + 4){ current = div; }
+    }
+    document.getElementById('monthName').textContent = monthNames[+current.dataset.month];
+    document.getElementById('yearName').textContent = current.dataset.year;
+  }
+
+  let scrollScheduled = false;
+  card.onscroll = () => {
+    if(scrollScheduled) return;
+    scrollScheduled = true;
+    requestAnimationFrame(() => { updateVisibleMonth(); scrollScheduled = false; });
+  };
+
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       const todayRow = body.querySelector('tr.today');
       if(todayRow) todayRow.scrollIntoView({ block: 'end' });
+      updateVisibleMonth();
     });
   });
 
