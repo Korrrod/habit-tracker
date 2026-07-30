@@ -2,7 +2,10 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Трекер">
 <title>Трекер привычек</title>
 <style>
   :root{
@@ -19,12 +22,22 @@
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     color: var(--text);
   }
-  .page{ max-width: 420px; margin: 0 auto; padding: 28px 20px; }
+  .page{ max-width: 420px; margin: 0 auto; padding: 28px 20px; padding-top: calc(28px + env(safe-area-inset-top)); padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
+  .title-row{ display:flex; align-items:baseline; justify-content:space-between; margin: 0 0 18px; }
   .title{
-    font-size: 34px; font-weight: 600; margin: 0 0 18px;
+    font-size: 34px; font-weight: 600; margin: 0;
     letter-spacing: -0.01em;
   }
   .title .year{ color: var(--faint); }
+  .gear{
+    background:none; border:none; color: var(--faint); cursor:pointer;
+    font-size: 18px; padding: 4px;
+  }
+  .gear:hover{ color: var(--muted); }
+  .status{
+    font-size: 12px; color: var(--faint); margin: -12px 0 12px; height: 14px;
+  }
+  .status.err{ color: var(--today-bg); }
   .card{
     background: var(--card);
     border-radius: 18px;
@@ -81,11 +94,31 @@
     line-height:1; margin: 0 auto; display:block;
   }
   .add-btn:hover{ color: var(--text); border-color: var(--muted); }
+
+  .setup{ max-width: 340px; margin: 60px auto; padding: 0 20px; }
+  .setup h2{ font-size: 20px; font-weight:600; margin: 0 0 6px; }
+  .setup p{ color: var(--muted); font-size: 13px; line-height:1.5; margin: 0 0 20px; }
+  .setup label{ display:block; font-size: 12px; color: var(--muted); margin: 14px 0 6px; }
+  .setup input{
+    width:100%; background: var(--card); border: 1px solid var(--faint);
+    color: var(--text); font: inherit; padding: 10px 12px; border-radius: 8px;
+  }
+  .setup input:focus{ outline:none; border-color: var(--muted); }
+  .setup button{
+    width:100%; margin-top: 22px; padding: 11px; border-radius: 8px; border:none;
+    background: var(--today-bg); color:#fff; font: inherit; font-weight:600; cursor:pointer;
+  }
+  .setup .err{ color: var(--today-bg); font-size: 12px; margin-top: 10px; min-height: 14px; }
 </style>
 </head>
 <body>
-<div class="page">
-  <h1 class="title"><span id="monthName"></span> <span class="year" id="yearName"></span></h1>
+
+<div class="page" id="app" style="display:none">
+  <div class="title-row">
+    <h1 class="title"><span id="monthName"></span> <span class="year" id="yearName"></span></h1>
+    <button class="gear" id="gearBtn" title="Настройки хранилища">⚙</button>
+  </div>
+  <div class="status" id="status"></div>
   <div class="card">
     <table>
       <thead><tr id="headRow"></tr></thead>
@@ -94,8 +127,27 @@
   </div>
 </div>
 
+<div class="setup" id="setup" style="display:none">
+  <h2>Подключение к GitHub</h2>
+  <p>Данные трекера хранятся в файле <code>data.json</code> в репозитории <code id="repoLabel"></code>, чтобы синхронизироваться между устройствами. Нужно один раз вставить токен на каждом устройстве/браузере — он сохраняется только здесь и никуда, кроме GitHub API, не отправляется.</p>
+
+  <label>Personal Access Token (fine-grained, права Contents: Read and write)</label>
+  <a id="tokenLink" href="#" target="_blank" style="display:block; font-size:12px; color:var(--muted); margin-bottom:8px;">Получить токен на GitHub →</a>
+  <input id="cfgToken" type="password" placeholder="github_pat_...">
+
+  <button id="cfgSave">Сохранить и подключиться</button>
+  <p style="font-size:11px; color:var(--faint); margin-top:10px;">На странице GitHub останется только выбрать репозиторий <code id="repoLabel2"></code> в поле «Selected repositories» и нажать «Generate token» — остальное уже заполнено.</p>
+  <div class="err" id="cfgErr"></div>
+</div>
+
 <script>
-const STORAGE_KEY = 'habit-tracker-state-v2';
+const CONFIG_KEY = 'habit-tracker-gh-config';
+
+// Репозиторий и путь к файлу данных - одинаковы для всех устройств, менять не нужно.
+const REPO_OWNER = 'Korrrod';
+const REPO_NAME = 'habit-tracker';
+const DATA_PATH = 'data.json';
+
 const monthNames = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const monthGenitive = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
 const weekdayShort = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
@@ -103,16 +155,80 @@ const weekdayShort = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
 // Отсчёт начинается с этой даты и продолжается по сегодняшний день включительно.
 const START_DATE = new Date(2026, 6, 20); // 20 июля 2026
 
-function loadState(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return JSON.parse(raw);
-  }catch(e){}
-  return { habits: ['Журнал','Чтение'], marks: {} };
+function loadConfig(){
+  try{ return JSON.parse(localStorage.getItem(CONFIG_KEY)); }catch(e){ return null; }
 }
-function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function saveConfig(cfg){ localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); }
 
-let state = loadState();
+let config = loadConfig();
+let state = { habits: ['Журнал','Чтение'], marks: {} };
+let currentSha = null;
+let saveTimer = null;
+
+function b64EncodeUnicode(str){ return btoa(unescape(encodeURIComponent(str))); }
+function b64DecodeUnicode(str){ return decodeURIComponent(escape(atob(str))); }
+
+function apiUrl(){
+  return `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${DATA_PATH}`;
+}
+
+async function ghLoad(){
+  const res = await fetch(apiUrl(), {
+    headers: {
+      Authorization: `token ${config.token}`,
+      Accept: 'application/vnd.github+json'
+    }
+  });
+  if(res.status === 404) return null;
+  if(!res.ok) throw new Error(`GitHub GET ${res.status}`);
+  const data = await res.json();
+  currentSha = data.sha;
+  return JSON.parse(b64DecodeUnicode(data.content));
+}
+
+async function ghSave(newState){
+  const body = {
+    message: 'Update habit tracker data',
+    content: b64EncodeUnicode(JSON.stringify(newState, null, 2))
+  };
+  if(currentSha) body.sha = currentSha;
+  const res = await fetch(apiUrl(), {
+    method: 'PUT',
+    headers: {
+      Authorization: `token ${config.token}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    let msg = res.status;
+    try{ const err = await res.json(); if(err.message) msg += ' ' + err.message; }catch(e){}
+    throw new Error(`GitHub PUT ${msg}`);
+  }
+  const data = await res.json();
+  currentSha = data.content.sha;
+}
+
+function setStatus(text, isErr){
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.classList.toggle('err', !!isErr);
+}
+
+function scheduleSave(){
+  setStatus('Сохранение…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try{
+      await ghSave(state);
+      setStatus('Сохранено');
+      setTimeout(() => setStatus(''), 1500);
+    }catch(e){
+      setStatus('Ошибка сохранения: ' + e.message, true);
+    }
+  }, 600);
+}
 
 function dateKey(date){ return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`; }
 
@@ -183,7 +299,7 @@ function render(){
         const v = input.value.trim();
         if(!state.marks[key]) state.marks[key] = {};
         if(v) state.marks[key][i] = v; else delete state.marks[key][i];
-        saveState();
+        scheduleSave();
         el.classList.toggle('on', !!v);
         el.textContent = v || '·';
       };
@@ -203,7 +319,7 @@ function render(){
   headRow.querySelectorAll('.habit-name').forEach(inp => {
     inp.addEventListener('change', () => {
       state.habits[+inp.dataset.i] = inp.value.trim() || 'Привычка';
-      saveState();
+      scheduleSave();
     });
   });
 
@@ -223,19 +339,85 @@ function render(){
           state.marks[k] = nm;
         }
       });
-      saveState();
+      scheduleSave();
       render();
     });
   });
 
   document.getElementById('addHabit').addEventListener('click', () => {
     state.habits.push('Новая');
-    saveState();
+    scheduleSave();
     render();
   });
 }
 
-render();
+async function init(){
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('repoLabel').textContent = `${REPO_OWNER}/${REPO_NAME}`;
+  document.getElementById('repoLabel2').textContent = `${REPO_OWNER}/${REPO_NAME}`;
+  document.getElementById('tokenLink').href =
+    'https://github.com/settings/personal-access-tokens/new' +
+    '?name=' + encodeURIComponent('Habit Tracker Widget') +
+    '&description=' + encodeURIComponent(`Contents read/write for ${REPO_OWNER}/${REPO_NAME} (${DATA_PATH})`) +
+    '&target_name=' + encodeURIComponent(REPO_OWNER) +
+    '&contents=write' +
+    '&expires_in=none';
+
+  if(!config || !config.token){
+    document.getElementById('setup').style.display = 'block';
+    return;
+  }
+
+  document.getElementById('app').style.display = 'block';
+  setStatus('Загрузка…');
+  try{
+    const loaded = await ghLoad();
+    if(loaded){
+      state = loaded;
+    } else {
+      // Файла ещё нет в репозитории - создаём с начальным состоянием.
+      await ghSave(state);
+    }
+    setStatus('');
+    render();
+  }catch(e){
+    setStatus('Не удалось загрузить: ' + e.message, true);
+  }
+}
+
+document.getElementById('cfgSave').addEventListener('click', async () => {
+  const token = document.getElementById('cfgToken').value.trim();
+  const errEl = document.getElementById('cfgErr');
+  errEl.textContent = '';
+
+  if(!token){
+    errEl.textContent = 'Вставь токен.';
+    return;
+  }
+
+  config = { token };
+  saveConfig(config);
+  errEl.textContent = 'Проверка подключения…';
+  try{
+    await init();
+    if(document.getElementById('app').style.display === 'block'){
+      errEl.textContent = '';
+    } else {
+      errEl.textContent = 'Не удалось подключиться, проверь токен.';
+    }
+  }catch(e){
+    errEl.textContent = 'Ошибка: ' + e.message;
+  }
+});
+
+document.getElementById('gearBtn').addEventListener('click', () => {
+  document.getElementById('cfgToken').value = '';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('setup').style.display = 'block';
+});
+
+init();
 </script>
 </body>
 </html>
